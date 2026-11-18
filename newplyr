@@ -1,0 +1,403 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="referrer" content="no-referrer">
+<title>EPICPLYR - ArtPlayer</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/artplayer@5.3.0/dist/artplayer.css">
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: #000;
+    color: #fff;
+    font-family: Arial, sans-serif;
+}
+
+#player {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+}
+
+#loading, #error {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: grid;
+    place-content: center;
+    text-align: center;
+    padding: 24px;
+    background: #080b10;
+    color: #fff;
+}
+
+#loading[hidden], #error[hidden] {
+    display: none;
+}
+
+#loading {
+    color: #cbd5e1;
+}
+
+.spinner {
+    width: 35px;
+    height: 35px;
+    border: 3px solid #333;
+    border-top-color: #fb5621;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    margin: 0 auto 15px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+#error h2 {
+    color: #fb5621;
+    font-size: 22px;
+}
+
+#error p {
+    color: #aaa;
+    line-height: 1.6;
+}
+
+.artplayer-app {
+    width: 100%;
+    height: 100%;
+}
+
+.artplayer {
+    background: #000 !important;
+    --art-theme: #fb5621;
+}
+
+.artplayer-mobile .art-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+}
+</style>
+</head>
+
+<body>
+
+<div id="player" class="artplayer-app"></div>
+
+<div id="loading">
+    <div>
+        <div class="spinner"></div>
+        <div>Loading EPICPLYR...</div>
+    </div>
+</div>
+
+<div id="error" hidden>
+    <div>
+        <h2>Player unavailable</h2>
+        <p id="error-message">
+            Please check your video URL and try again.
+        </p>
+    </div>
+</div>
+
+<script>
+(function () {
+"use strict";
+
+const params = new URLSearchParams(location.search);
+
+const streamURL = params.get("url");
+const title = params.get("title") || "EPICPLYR";
+const isLive = params.get("live") !== "0";
+
+document.title = title + " - EPICPLYR";
+
+const container = document.getElementById("player");
+const loading = document.getElementById("loading");
+const errorBox = document.getElementById("error");
+const errorMessage = document.getElementById("error-message");
+
+let art = null;
+let hls = null;
+
+function fail(message) {
+    loading.hidden = true;
+    container.style.display = "none";
+    errorMessage.textContent = message;
+    errorBox.hidden = false;
+
+    if (art) {
+        art.destroy(false);
+        art = null;
+    }
+}
+
+function loadScript(url) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = url;
+        script.async = true;
+
+        script.onload = resolve;
+        script.onerror = () => {
+            script.remove();
+            reject(new Error("Library loading failed"));
+        };
+
+        document.head.appendChild(script);
+    });
+}
+
+async function loadLibrary(primary, fallback, check) {
+    if (check()) return;
+
+    try {
+        await loadScript(primary);
+    } catch (error) {
+        await loadScript(fallback);
+    }
+
+    if (!check()) {
+        throw new Error("Required library unavailable");
+    }
+}
+
+function validURL(value) {
+    try {
+        const url = new URL(value);
+
+        if (!["http:", "https:"].includes(url.protocol)) {
+            return null;
+        }
+
+        if (url.username || url.password) {
+            return null;
+        }
+
+        return url;
+
+    } catch (error) {
+        return null;
+    }
+}
+
+async function startPlayer() {
+
+    const target = validURL(streamURL || "");
+
+    if (!target) {
+        fail("No valid video URL provided. Add ?url=YOUR_VIDEO_URL");
+        return;
+    }
+
+    const isMP4 = /\.(mp4|m4v|webm|ogg|ogv)$/i.test(target.pathname);
+    const type = isMP4 ? "" : "m3u8";
+
+    try {
+
+        loading.hidden = false;
+
+        await loadLibrary(
+            "https://cdn.jsdelivr.net/npm/artplayer@5.3.0/dist/artplayer.js",
+            "https://unpkg.com/artplayer@5.3.0/dist/artplayer.js",
+            () => typeof window.Artplayer === "function"
+        );
+
+        if (type === "m3u8") {
+
+            await loadLibrary(
+                "https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js",
+                "https://unpkg.com/hls.js@1.6.15/dist/hls.min.js",
+                () => typeof window.Hls === "function"
+            );
+
+            if (!Hls.isSupported() &&
+                !document.createElement("video").canPlayType(
+                    "application/vnd.apple.mpegurl"
+                )) {
+                throw new Error("HLS is not supported in this browser.");
+            }
+        }
+
+        art = new Artplayer({
+
+            container: container,
+
+            url: target.href,
+
+            type: type,
+
+            isLive: isLive,
+
+            autoSize: true,
+
+            fullscreen: true,
+
+            fullscreenWeb: true,
+
+            setting: true,
+
+            pip: true,
+
+            playbackRate: true,
+
+            aspectRatio: true,
+
+            autoOrientation: true,
+
+            lock: true,
+
+            fastForward: true,
+
+            autoplay: false,
+
+            muted: false,
+
+            theme: "#fb5621",
+
+            volume: 0.7,
+
+            hotkey: true,
+
+            mutex: true,
+
+            miniProgressBar: true,
+
+            moreVideoAttr: {
+                playsinline: true,
+                "webkit-playsinline": true,
+                preload: "auto",
+                referrerpolicy: "no-referrer"
+            },
+
+            customType: {
+
+                m3u8: function(video, url, player) {
+
+                    if (Hls.isSupported()) {
+
+                        hls = new Hls({
+
+                            enableWorker: true,
+
+                            autoStartLoad: true,
+
+                            startPosition: -1,
+
+                            liveSyncDurationCount: isLive ? 3 : 3,
+
+                            liveMaxLatencyDurationCount: 6,
+
+                            maxBufferLength: 30,
+
+                            lowLatencyMode: false
+
+                        });
+
+                        hls.loadSource(url);
+                        hls.attachMedia(video);
+
+                        hls.on(Hls.Events.ERROR, function(event, data) {
+
+                            if (!data.fatal) return;
+
+                            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+
+                                hls.startLoad();
+
+                            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+
+                                hls.recoverMediaError();
+
+                            } else {
+
+                                player.notice.show = "Stream unavailable";
+                                hls.destroy();
+                                hls = null;
+
+                            }
+                        });
+
+                        player.on("destroy", function() {
+                            if (hls) {
+                                hls.destroy();
+                                hls = null;
+                            }
+                        });
+
+                    } else {
+
+                        video.src = url;
+
+                    }
+                }
+            }
+
+        });
+
+        art.on("ready", function() {
+            loading.hidden = true;
+        });
+
+        art.on("video:canplay", function() {
+            loading.hidden = true;
+        });
+
+        art.on("video:waiting", function() {
+            art.notice.show = "Buffering...";
+        });
+
+        art.on("video:playing", function() {
+            loading.hidden = true;
+        });
+
+        art.on("video:error", function() {
+            if (!hls) {
+                fail("This video could not be played. Check the URL or format.");
+            }
+        });
+
+        art.on("error", function() {
+            fail("Player initialization failed.");
+        });
+
+        setTimeout(function() {
+            if (loading.hidden === false && !art) {
+                fail("Unable to initialize the player.");
+            }
+        }, 15000);
+
+    } catch (error) {
+
+        console.error("EPICPLYR:", error);
+
+        fail("Unable to load the player or video. Please check your connection and stream URL.");
+
+    }
+}
+
+startPlayer();
+
+window.addEventListener("beforeunload", function() {
+    if (art) art.destroy(false);
+    if (hls) hls.destroy();
+});
+
+})();
+</script>
+
+</body>
+</html>
