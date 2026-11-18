@@ -3,10 +3,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
-<title>EPICPLYR - ArtPlayer</title>
+
+<title>EPICPLYR</title>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/artplayer@5.3.0/dist/artplayer.css">
 
@@ -18,11 +19,20 @@
 html, body {
     width: 100%;
     height: 100%;
+    min-height: 100%;
     margin: 0;
+    padding: 0;
     overflow: hidden;
     background: #000;
     color: #fff;
     font-family: Arial, sans-serif;
+}
+
+body {
+    position: fixed;
+    inset: 0;
+    height: 100vh;
+    height: 100dvh;
 }
 
 #player {
@@ -30,13 +40,41 @@ html, body {
     inset: 0;
     width: 100%;
     height: 100%;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
+}
+
+.artplayer-app,
+.artplayer {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    background: #000 !important;
+    --art-theme: #fb5621;
+}
+
+/* Video sizing */
+.artplayer video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain;
     background: #000;
 }
 
+/* Mobile controls */
+.artplayer-mobile .art-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Loading and error screens */
 #loading, #error {
     position: fixed;
     inset: 0;
-    z-index: 10;
+    z-index: 100;
     display: grid;
     place-content: center;
     text-align: center;
@@ -64,7 +102,9 @@ html, body {
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 #error h2 {
@@ -76,20 +116,6 @@ html, body {
     color: #aaa;
     line-height: 1.6;
 }
-
-.artplayer-app {
-    width: 100%;
-    height: 100%;
-}
-
-.artplayer {
-    background: #000 !important;
-    --art-theme: #fb5621;
-}
-
-.artplayer-mobile .art-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-}
 </style>
 </head>
 
@@ -100,7 +126,7 @@ html, body {
 <div id="loading">
     <div>
         <div class="spinner"></div>
-        <div>Loading EPICPLYR...</div>
+        <div>Loading...</div>
     </div>
 </div>
 
@@ -136,6 +162,7 @@ let hls = null;
 function fail(message) {
     loading.hidden = true;
     container.style.display = "none";
+
     errorMessage.textContent = message;
     errorBox.hidden = false;
 
@@ -143,15 +170,22 @@ function fail(message) {
         art.destroy(false);
         art = null;
     }
+
+    if (hls) {
+        hls.destroy();
+        hls = null;
+    }
 }
 
 function loadScript(url) {
     return new Promise((resolve, reject) => {
         const script = document.createElement("script");
+
         script.src = url;
         script.async = true;
 
         script.onload = resolve;
+
         script.onerror = () => {
             script.remove();
             reject(new Error("Library loading failed"));
@@ -224,10 +258,12 @@ async function startPlayer() {
                 () => typeof window.Hls === "function"
             );
 
-            if (!Hls.isSupported() &&
+            if (
+                !Hls.isSupported() &&
                 !document.createElement("video").canPlayType(
                     "application/vnd.apple.mpegurl"
-                )) {
+                )
+            ) {
                 throw new Error("HLS is not supported in this browser.");
             }
         }
@@ -297,7 +333,7 @@ async function startPlayer() {
 
                             startPosition: -1,
 
-                            liveSyncDurationCount: isLive ? 3 : 3,
+                            liveSyncDurationCount: 3,
 
                             liveMaxLatencyDurationCount: 6,
 
@@ -308,6 +344,7 @@ async function startPlayer() {
                         });
 
                         hls.loadSource(url);
+
                         hls.attachMedia(video);
 
                         hls.on(Hls.Events.ERROR, function(event, data) {
@@ -325,17 +362,20 @@ async function startPlayer() {
                             } else {
 
                                 player.notice.show = "Stream unavailable";
-                                hls.destroy();
-                                hls = null;
 
+                                hls.destroy();
+
+                                hls = null;
                             }
                         });
 
                         player.on("destroy", function() {
+
                             if (hls) {
                                 hls.destroy();
                                 hls = null;
                             }
+
                         });
 
                     } else {
@@ -365,9 +405,11 @@ async function startPlayer() {
         });
 
         art.on("video:error", function() {
+
             if (!hls) {
                 fail("This video could not be played. Check the URL or format.");
             }
+
         });
 
         art.on("error", function() {
@@ -375,9 +417,11 @@ async function startPlayer() {
         });
 
         setTimeout(function() {
+
             if (loading.hidden === false && !art) {
                 fail("Unable to initialize the player.");
             }
+
         }, 15000);
 
     } catch (error) {
@@ -392,8 +436,11 @@ async function startPlayer() {
 startPlayer();
 
 window.addEventListener("beforeunload", function() {
+
     if (art) art.destroy(false);
+
     if (hls) hls.destroy();
+
 });
 
 })();
